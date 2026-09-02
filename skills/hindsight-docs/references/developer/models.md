@@ -107,7 +107,7 @@ Each provider has a recommended default model that's used when `HINDSIGHT_API_LL
 | `lmstudio` | `local-model` |
 | `llamacpp` | `gemma-4-e2b-it` (auto-downloaded GGUF) |
 | `minimax` | `MiniMax-M2.7` |
-| `deepseek` | `deepseek-v4-flash` |
+| `deepseek` | `deepseek-v4-flash-0731` |
 | `zai` | `glm-4.5-flash` |
 | `opencode-go` | `deepseek-v4-flash` |
 | `volcano` | `doubao-pro-32k` |

@@ -469,7 +469,7 @@ PROVIDER_DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
     "groq": "openai/gpt-oss-120b",
     "minimax": "MiniMax-M2.7",
-    "deepseek": "deepseek-v4-flash",
+    "deepseek": "deepseek-v4-flash-0731",
     "zai": "glm-4.5-flash",
     "opencode-go": "deepseek-v4-flash",
     "ollama": "gemma3:12b",

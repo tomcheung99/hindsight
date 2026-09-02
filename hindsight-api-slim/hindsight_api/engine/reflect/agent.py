@@ -140,6 +140,7 @@ async def _generate_structured_output(
     response_schema: dict,
     llm_config: "LLMProvider",
     reflect_id: str,
+    max_retries: int | None = None,
 ) -> tuple[dict[str, Any] | None, int, int]:
     """Generate structured output from an answer using the provided JSON schema.
 
@@ -240,6 +241,7 @@ OUTPUT:"""
             scope="reflect_structured",
             skip_validation=True,  # We'll handle the dict ourselves
             return_usage=True,
+            max_retries=max_retries,
         )
 
         # Convert to dict
@@ -321,6 +323,7 @@ async def run_reflect_agent(
     include_recall: bool = True,
     budget: str | None = None,
     max_context_tokens: int = 100_000,
+    max_retries: int | None = None,
 ) -> ReflectAgentResult:
     """
     Execute the reflect agent loop using native tool calling.
@@ -343,6 +346,8 @@ async def run_reflect_agent(
         max_iterations: Maximum number of iterations before forcing response
         max_tokens: Maximum tokens for the final response
         response_schema: Optional JSON Schema for structured output in final response
+        max_retries: Optional retry budget override for LLM calls in the agent loop. Callers pass the
+            resolved per-operation retry cap (None = provider default).
         directives: Optional list of directive mental models to inject as hard rules
 
     Returns:
@@ -435,6 +440,10 @@ async def run_reflect_agent(
             f"total={elapsed_ms}ms"
         )
 
+    # Retry budget for LLM calls in this agent loop. Callers pass the resolved
+    # per-operation retry cap; None falls back to the provider defaults.
+    retry_kwargs: dict[str, Any] = {"max_retries": max_retries} if max_retries is not None else {}
+
     consecutive_errors = 0
     for iteration in range(max_iterations):
         is_last = iteration == max_iterations - 1
@@ -453,6 +462,7 @@ async def run_reflect_agent(
                 scope="reflect",
                 max_completion_tokens=max_tokens,
                 return_usage=True,
+                **retry_kwargs,
             )
             llm_duration = int((time.time() - llm_start) * 1000)
             total_input_tokens += usage.input_tokens
@@ -471,7 +481,7 @@ async def run_reflect_agent(
             structured_output = None
             if response_schema and answer:
                 structured_output, struct_in, struct_out = await _generate_structured_output(
-                    answer, response_schema, llm_config, reflect_id
+                    answer, response_schema, llm_config, reflect_id, max_retries=max_retries
                 )
                 total_input_tokens += struct_in
                 total_output_tokens += struct_out
@@ -510,6 +520,7 @@ async def run_reflect_agent(
                 scope="reflect",
                 max_completion_tokens=max_tokens,
                 return_usage=True,
+                **retry_kwargs,
             )
             llm_duration = int((time.time() - llm_start) * 1000)
             total_input_tokens += usage.input_tokens
@@ -527,7 +538,7 @@ async def run_reflect_agent(
             structured_output = None
             if response_schema and answer:
                 structured_output, struct_in, struct_out = await _generate_structured_output(
-                    answer, response_schema, llm_config, reflect_id
+                    answer, response_schema, llm_config, reflect_id, max_retries=max_retries
                 )
                 total_input_tokens += struct_in
                 total_output_tokens += struct_out
@@ -569,6 +580,7 @@ async def run_reflect_agent(
                 tools=tools,
                 scope="reflect_tool_call",
                 tool_choice=iter_tool_choice,
+                **retry_kwargs,
             )
             llm_duration = int((time.time() - llm_start) * 1000)
             consecutive_errors = 0
@@ -613,6 +625,7 @@ async def run_reflect_agent(
                 scope="reflect",
                 max_completion_tokens=max_tokens,
                 return_usage=True,
+                **retry_kwargs,
             )
             llm_duration = int((time.time() - llm_start) * 1000)
             total_input_tokens += usage.input_tokens
@@ -631,7 +644,7 @@ async def run_reflect_agent(
             structured_output = None
             if response_schema and answer:
                 structured_output, struct_in, struct_out = await _generate_structured_output(
-                    answer, response_schema, llm_config, reflect_id
+                    answer, response_schema, llm_config, reflect_id, max_retries=max_retries
                 )
                 total_input_tokens += struct_in
                 total_output_tokens += struct_out
@@ -688,6 +701,7 @@ async def run_reflect_agent(
                         scope="reflect",
                         max_completion_tokens=max_tokens,
                         return_usage=True,
+                        **retry_kwargs,
                     )
                     total_input_tokens += rewrite_usage.input_tokens
                     total_output_tokens += rewrite_usage.output_tokens
@@ -705,7 +719,7 @@ async def run_reflect_agent(
                 structured_output = None
                 if response_schema and answer:
                     structured_output, struct_in, struct_out = await _generate_structured_output(
-                        answer, response_schema, llm_config, reflect_id
+                        answer, response_schema, llm_config, reflect_id, max_retries=max_retries
                     )
                     total_input_tokens += struct_in
                     total_output_tokens += struct_out
@@ -734,6 +748,7 @@ async def run_reflect_agent(
                 scope="reflect",
                 max_completion_tokens=max_tokens,
                 return_usage=True,
+                **retry_kwargs,
             )
             llm_duration = int((time.time() - llm_start) * 1000)
             total_input_tokens += usage.input_tokens
@@ -752,7 +767,7 @@ async def run_reflect_agent(
             structured_output = None
             if response_schema and answer:
                 structured_output, struct_in, struct_out = await _generate_structured_output(
-                    answer, response_schema, llm_config, reflect_id
+                    answer, response_schema, llm_config, reflect_id, max_retries=max_retries
                 )
                 total_input_tokens += struct_in
                 total_output_tokens += struct_out
@@ -822,6 +837,7 @@ async def run_reflect_agent(
                     directives_applied=directives_applied,
                     llm_config=llm_config,
                     response_schema=response_schema,
+                    max_retries=max_retries,
                 )
 
         # Execute other tools in parallel (exclude done tool in all its format variants)
@@ -1010,6 +1026,7 @@ async def _process_done_tool(
     directives_applied: list[DirectiveInfo],
     llm_config: "LLMProvider | None" = None,
     response_schema: dict | None = None,
+    max_retries: int | None = None,
 ) -> ReflectAgentResult:
     """Process the done tool call and return the result."""
     args = done_call.arguments
@@ -1030,7 +1047,7 @@ async def _process_done_tool(
     final_usage = usage
     if response_schema and llm_config and answer:
         structured_output, struct_in, struct_out = await _generate_structured_output(
-            answer, response_schema, llm_config, reflect_id
+            answer, response_schema, llm_config, reflect_id, max_retries=max_retries
         )
         # Add structured output tokens to usage
         final_usage = TokenUsageSummary(

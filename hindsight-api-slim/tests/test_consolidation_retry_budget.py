@@ -24,6 +24,7 @@ def mock_config():
     config.observations_mission = None
     config.consolidation_max_attempts = 3
     config.consolidation_llm_max_retries = None
+    config.llm_max_retries = 3  # global LLM retry budget: fallback when consolidation_llm_max_retries is None
     return config
 
 
@@ -69,8 +70,8 @@ class TestConsolidationRetryBudget:
         assert mock_llm_config.call.call_args.kwargs.get("max_retries") == 3
 
     @pytest.mark.asyncio
-    async def test_max_retries_not_passed_when_none(self, mock_llm_config, mock_config):
-        """When consolidation_llm_max_retries is None, max_retries is not passed."""
+    async def test_max_retries_falls_back_to_global_llm_budget(self, mock_llm_config, mock_config):
+        """When consolidation_llm_max_retries is None, max_retries falls back to config.llm_max_retries (documented fallback)."""
         mock_config.consolidation_llm_max_retries = None
         await _consolidate_batch_with_llm(
             llm_config=mock_llm_config,
@@ -79,7 +80,7 @@ class TestConsolidationRetryBudget:
             union_source_facts={},
             config=mock_config,
         )
-        assert "max_retries" not in mock_llm_config.call.call_args.kwargs
+        assert mock_llm_config.call.call_args.kwargs.get("max_retries") == 3
 
     @pytest.mark.asyncio
     async def test_reduced_budget_limits_total_calls(self, mock_llm_config, mock_config):

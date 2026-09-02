@@ -1284,7 +1284,15 @@ async def _consolidate_batch_with_llm(
     response_model = _build_response_model(max_creates=remaining_observation_slots)
 
     max_attempts = config.consolidation_max_attempts
+    # Fall back to the global LLM retry budget when no consolidation-specific
+    # override is set (documented fallback: HINDSIGHT_API_CONSOLIDATION_LLM_MAX_RETRIES
+    # -> HINDSIGHT_API_LLM_MAX_RETRIES). Without this, a None override silently
+    # drops into call()'s hardcoded max_retries=10 (11 attempts per batch).
+    # getattr(): tests may substitute partial config objects; a missing field must
+    # not break consolidation (falls back to call()'s own default, as before).
     inner_max_retries = config.consolidation_llm_max_retries
+    if inner_max_retries is None:
+        inner_max_retries = getattr(config, "llm_max_retries", None)
     last_exc: Exception | None = None
     # Pre-compute a stable identifier set for the batch so failure logs name the
     # exact memories whose consolidation is failing — without this, an opaque

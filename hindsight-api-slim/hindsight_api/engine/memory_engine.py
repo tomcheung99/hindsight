@@ -6060,6 +6060,14 @@ class MemoryEngine(MemoryEngineInterface):
         max_iterations = max(1, int(base_max_iterations * budget_multipliers.get(effective_budget, 1.0)))
         max_context_tokens = config.reflect_max_context_tokens
         wall_timeout = config.reflect_wall_timeout
+        # Reflect LLM retry budget: per-op override falls back to the global LLM retry budget
+        # (documented: HINDSIGHT_API_REFLECT_LLM_MAX_RETRIES -> HINDSIGHT_API_LLM_MAX_RETRIES; previously
+        # the agent loop silently used the hardcoded defaults of call()/call_with_tools() (10 and 5).
+        # getattr(): the resolver normally returns a full HindsightConfig, but tests may
+        # substitute partial namespaces; a missing field must not break reflect.
+        reflect_max_retries = getattr(resolved_reflect_config, "reflect_llm_max_retries", None)
+        if reflect_max_retries is None:
+            reflect_max_retries = getattr(resolved_reflect_config, "llm_max_retries", None)
 
         # Run agentic loop - acquire connections only when needed for DB operations
         # (not held during LLM calls which can be slow)
@@ -6221,6 +6229,7 @@ class MemoryEngine(MemoryEngineInterface):
                         include_recall=include_recall,
                         budget=effective_budget,
                         max_context_tokens=max_context_tokens,
+                        max_retries=reflect_max_retries,
                     ),
                     timeout=wall_timeout,
                 )
